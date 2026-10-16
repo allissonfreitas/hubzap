@@ -33,10 +33,13 @@ test('privacy account selectors persist and reapply their own setting', () => {
 
 test('privacy panel collapse is independent from the enabled switch', () => {
   const index = fs.readFileSync(path.join(root, 'src', 'index.html'), 'utf8');
+  const styles = fs.readFileSync(path.join(root, 'src', 'styles.css'), 'utf8');
   assert.match(index, /id="privacyEnabled" role="switch"/);
   assert.match(renderer, /privacyPanelOpen=!privacyPanelOpen;renderPrivacy\(\)/);
   assert.match(renderer, /privacy\.enabled=e\.target\.checked;await savePrivacy\(\)/);
   assert.doesNotMatch(renderer, /privacy\.enabled=!privacy\.enabled/);
+  assert.match(styles, /aside\{[^}]*overflow-y:auto;overflow-x:hidden/);
+  assert.match(styles, /\.privacy-control\{[^}]*flex:0 0 auto;min-height:45px/);
 });
 
 test('release metadata remains stable for v0.1.1', () => {
