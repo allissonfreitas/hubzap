@@ -15,7 +15,15 @@
     <button id="quickToggle" class="feature">⚡ Mensagens rápidas</button>
     <button id="supportToggle" class="feature">📅 Eventos / Lembretes</button>
     <button id="ticketsToggle" class="feature">🎧 Central de Atendimento</button>
-    <button id="privacyToggle" class="feature privacy-toggle">🔒 Modo Privacidade <small id="privacyState">Desativado</small></button>
+    <div id="privacyControl" class="feature privacy-control">
+      <button id="privacyToggle" class="privacy-toggle" type="button" aria-expanded="false" aria-controls="privacyOptions">
+        <span class="privacy-label">🔒 Modo Privacidade<small id="privacyState">Desativado</small></span><span id="privacyChevron" aria-hidden="true">▾</span>
+      </button>
+      <label class="privacy-switch" title="Ligar ou desligar o Modo Privacidade">
+        <input type="checkbox" id="privacyEnabled" role="switch" aria-label="Ligar ou desligar o Modo Privacidade">
+        <span class="privacy-slider"></span>
+      </label>
+    </div>
     <div id="privacyOptions" class="privacy-options hidden">
       <strong class="privacy-section">Aplicar privacidade em</strong>
       <label><input type="checkbox" id="privacyPersonal" checked> 👤 Pessoal</label>

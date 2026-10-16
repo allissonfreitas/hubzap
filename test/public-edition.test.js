@@ -31,6 +31,14 @@ test('privacy account selectors persist and reapply their own setting', () => {
   assert.match(main, /id === 'personal' \? privacySettings\.personal !== false : privacySettings\.company !== false/);
 });
 
+test('privacy panel collapse is independent from the enabled switch', () => {
+  const index = fs.readFileSync(path.join(root, 'src', 'index.html'), 'utf8');
+  assert.match(index, /id="privacyEnabled" role="switch"/);
+  assert.match(renderer, /privacyPanelOpen=!privacyPanelOpen;renderPrivacy\(\)/);
+  assert.match(renderer, /privacy\.enabled=e\.target\.checked;await savePrivacy\(\)/);
+  assert.doesNotMatch(renderer, /privacy\.enabled=!privacy\.enabled/);
+});
+
 test('release metadata remains stable for v0.1.1', () => {
   assert.equal(packageJson.version, '0.1.1');
   assert.equal(packageJson.build.productName, 'HubZap');

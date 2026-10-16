@@ -14,6 +14,7 @@ let updateState = 'current';
 let updateError = '';
 let activeReminderId = null;
 let privacy = { enabled:false, names:true, photos:true, previews:true, chat:true, media:true, revealOnHover:true };
+let privacyPanelOpen = false;
 
 function choose(id) {
   selected = id;
@@ -251,10 +252,14 @@ window.hubZap.getVersion().then(version => {
 setUpdateStatus({ state: 'current' });
 
 function renderPrivacy(){
-  const btn=document.querySelector('#privacyToggle');
+  const control=document.querySelector('#privacyControl');
+  const toggle=document.querySelector('#privacyToggle');
   document.querySelector('#privacyState').textContent=privacy.enabled?'Ativado':'Desativado';
-  btn.classList.toggle('privacy-on',privacy.enabled);
-  document.querySelector('#privacyOptions').classList.toggle('hidden',!privacy.enabled);
+  document.querySelector('#privacyEnabled').checked=privacy.enabled;
+  document.querySelector('#privacyChevron').textContent=privacyPanelOpen?'▴':'▾';
+  control.classList.toggle('privacy-on',privacy.enabled);
+  toggle.setAttribute('aria-expanded',String(privacyPanelOpen));
+  document.querySelector('#privacyOptions').classList.toggle('hidden',!privacyPanelOpen);
   document.querySelector('#privacyPersonal').checked=privacy.personal!==false;
   document.querySelector('#privacyCompany').checked=privacy.company!==false;
   document.querySelector('#privacyNames').checked=privacy.names;
@@ -268,7 +273,8 @@ async function savePrivacy(){
   const result=await window.hubZap.setPrivacy(privacy);
   if(result.ok){privacy=result.settings;renderPrivacy();}
 }
-document.querySelector('#privacyToggle').addEventListener('click',async()=>{privacy.enabled=!privacy.enabled;await savePrivacy();toast(privacy.enabled?'🔒 Privacidade ativada.':'🔓 Privacidade desativada.');});
+document.querySelector('#privacyToggle').addEventListener('click',()=>{privacyPanelOpen=!privacyPanelOpen;renderPrivacy();});
+document.querySelector('#privacyEnabled').addEventListener('change',async e=>{privacy.enabled=e.target.checked;await savePrivacy();toast(privacy.enabled?'🔒 Privacidade ativada.':'🔓 Privacidade desativada.');});
 [
   ['privacyPersonal','personal'],
   ['privacyCompany','company'],
