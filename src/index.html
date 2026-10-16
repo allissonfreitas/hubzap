@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:;">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>HubZap</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <aside id="sidebar">
+    <div class="brand"><strong>HubZap</strong><span>Seus WhatsApps em um só lugar</span><small class="brand-credit">HubZap by AFATEC</small></div>
+    <button class="account active" data-account="personal"><b>👤 Pessoal <span class="unread-badge hidden" data-unread="personal" aria-label="Conversas não lidas"></span></b><small data-account-status="personal">Sessão independente</small></button>
+    <button class="account" data-account="company"><b>💼 Empresa <span class="unread-badge hidden" data-unread="company" aria-label="Mensagens não lidas"></span></b><small data-account-status="company">Sessão independente</small></button>
+    <button id="quickToggle" class="feature">⚡ Mensagens rápidas</button>
+    <button id="supportToggle" class="feature">📅 Eventos / Lembretes</button>
+    <button id="ticketsToggle" class="feature">🎧 Central de Atendimento</button>
+    <button id="privacyToggle" class="feature privacy-toggle">🔒 Modo Privacidade <small id="privacyState">Desativado</small></button>
+    <div id="privacyOptions" class="privacy-options hidden">
+      <strong class="privacy-section">Aplicar privacidade em</strong>
+      <label><input type="checkbox" id="privacyPersonal" checked> 👤 Pessoal</label>
+      <label><input type="checkbox" id="privacyCompany" checked> 💼 Empresa</label>
+      <strong class="privacy-section">Ocultar</strong>
+      <label><input type="checkbox" id="privacyNames" checked> Nomes</label>
+      <label><input type="checkbox" id="privacyPhotos" checked> Fotos</label>
+      <label><input type="checkbox" id="privacyPreviews" checked> Prévia das mensagens</label>
+      <label><input type="checkbox" id="privacyChat" checked> Conversa aberta</label>
+      <label><input type="checkbox" id="privacyMedia" checked> Mídias</label>
+      <label><input type="checkbox" id="privacyHover" checked> Revelar ao passar o mouse</label>
+    </div>
+    <button id="themeToggle" class="feature">🌙 Tema <small id="themeState">Escuro</small></button>
+    <div class="spacer"></div>
+    <button id="updateButton" class="update-button" data-state="current">
+      <b>✓ HubZap atualizado</b><small id="updateDetail">Verificando versão...</small>
+    </button>
+    <button id="single">▣ Conta selecionada</button>
+    <button id="split">▥ Lado a lado</button>
+    <button id="reload">↻ Recarregar</button>
+    <div class="footer"><button id="afatecLink" class="afatec-link" title="Abrir afatec.net"><span class="afatec-mark">A</span><span>AFATEC</span></button><small>HubZap <span id="appVersion">v0.1.0</span></small></div>
+  </aside>
+
+  <main>
+    <header><span id="title">WhatsApp Pessoal</span><span id="mode">Conta selecionada</span></header>
+    <section id="workspace"><div class="loading">Carregando WhatsApp Web…</div></section>
+  </main>
+
+  <section id="quickPanel" class="quick-panel hidden">
+    <div class="quick-head">
+      <div><b>⚡ Mensagens rápidas</b><small>Copie e cole na conversa</small></div>
+      <button id="quickClose" class="icon-btn">×</button>
+    </div>
+    <div class="quick-tools">
+      <input id="quickSearch" placeholder="Buscar mensagem...">
+      <select id="quickCategory">
+        <option value="">Todas as categorias</option>
+        <option>Comercial</option><option>Suporte</option><option>Pessoal</option><option>Cobrança</option><option>Geral</option>
+      </select>
+      <button id="quickNew">＋ Nova mensagem</button>
+    </div>
+    <div id="quickList" class="quick-list"></div>
+  </section>
+
+  <section id="ticketsPanel" class="quick-panel hidden">
+    <div class="quick-head"><div><b>🎧 Central de Atendimento</b><small>Organize os atendimentos de suporte</small></div><button id="ticketsClose" class="icon-btn">×</button></div>
+    <div class="ticket-summary">
+      <span><b id="countWorking">0</b><small>Atendendo</small></span>
+      <span><b id="countCustomer">0</b><small>Cliente</small></span>
+      <span><b id="countThird">0</b><small>Terceiro</small></span>
+      <span><b id="countResolved">0</b><small>Resolvidos</small></span>
+    </div>
+    <div class="quick-tools"><button id="ticketNew" class="primary">＋ Novo atendimento</button><select id="ticketFilter"><option value="">Todos os status</option><option>Em atendimento</option><option>Aguardando cliente</option><option>Aguardando terceiro</option><option>Resolvido</option></select></div>
+    <form id="ticketForm" class="support-form hidden">
+      <div class="support-form-head"><b id="ticketFormTitle">Novo atendimento</b><button type="button" id="ticketCancelTop" class="icon-btn">×</button></div>
+      <input type="hidden" id="ticketId">
+      <label>Cliente / contato<input id="ticketCustomer" maxlength="100" required placeholder="Nome ou telefone"></label>
+      <label>Assunto<input id="ticketSubject" maxlength="140" required placeholder="Ex.: Erro na emissão da nota"></label>
+      <label>Status<select id="ticketStatus"><option>Em atendimento</option><option>Aguardando cliente</option><option>Aguardando terceiro</option><option>Resolvido</option></select></label>
+      <label>Conta<select id="ticketAccount"><option value="personal">Pessoal</option><option value="company">Empresa</option></select></label>
+      <label>Notas do atendimento<textarea id="ticketNotes" maxlength="3000" placeholder="O que foi feito, pendências e próximos passos..."></textarea></label>
+      <div class="dialog-actions"><button type="button" id="ticketCancel">Cancelar</button><button type="submit" class="primary">Salvar atendimento</button></div>
+    </form>
+    <div id="ticketList" class="quick-list"></div>
+  </section>
+
+  <section id="supportPanel" class="quick-panel hidden">
+    <div class="quick-head"><div><b>📅 Eventos / Lembretes</b><small>Acompanhamento de suporte</small></div><button id="supportClose" class="icon-btn">×</button></div>
+    <div id="reminderAlert" class="reminder-alert hidden"><div class="reminder-alert-copy"><strong id="reminderAlertTitle">⏰ Lembrete</strong><span id="reminderAlertText"></span></div><div class="reminder-alert-actions"><button id="reminderAlertDone" class="primary">✓ Concluir</button><select id="reminderAlertSnooze"><option value="">⏰ Adiar</option><option value="10">10 min</option><option value="30">30 min</option><option value="60">1 hora</option><option value="1440">Amanhã</option></select><button id="reminderAlertClose" title="Fechar">×</button></div></div>
+    <div class="quick-tools"><button id="supportNew" class="primary">＋ Novo evento</button><select id="supportFilter"><option value="">Todos</option><option>Pendente</option><option>Concluído</option></select></div>
+    <form id="supportForm" class="support-form hidden">
+      <div class="support-form-head"><b id="supportFormTitle">Novo evento</b><button type="button" id="supportCancel" class="icon-btn">×</button></div>
+      <input type="hidden" id="supportId"><input type="hidden" id="supportTicketId">
+      <label>Título<input id="supportTitle" maxlength="100" required placeholder="Ex.: Retornar cliente"></label>
+      <label>Cliente / contato<input id="supportContact" maxlength="100" placeholder="Nome ou telefone"></label>
+      <label>Data e hora do lembrete<input id="supportWhen" type="datetime-local" required></label>
+      <label>Conta<select id="supportAccount"><option value="personal">Pessoal</option><option value="company">Empresa</option></select></label>
+      <label>Observações<textarea id="supportNotes" maxlength="1000" placeholder="Detalhes do atendimento..."></textarea></label>
+      <div class="dialog-actions"><button type="button" id="supportCancelBottom">Cancelar</button><button type="submit" class="primary">Salvar evento</button></div>
+    </form>
+    <div id="supportList" class="quick-list"></div>
+  </section>
+
+
+  <dialog id="quickDialog">
+    <form id="quickForm">
+      <h3 id="formTitle">Nova mensagem rápida</h3>
+      <input type="hidden" id="quickId">
+      <label>Título<input id="quickTitle" maxlength="60" required placeholder="Ex.: Saudação inicial"></label>
+      <label>Categoria<select id="quickFormCategory"><option>Comercial</option><option>Suporte</option><option>Pessoal</option><option>Cobrança</option><option>Geral</option></select></label>
+      <label>Mensagem<textarea id="quickText" maxlength="2000" required placeholder="Digite a mensagem..."></textarea></label>
+      <label class="favorite"><input type="checkbox" id="quickFavorite"> ⭐ Favorita</label>
+      <div class="dialog-actions"><button type="button" id="quickCancel">Cancelar</button><button type="submit" class="primary">Salvar</button></div>
+    </form>
+  </dialog>
+  <div id="toast"></div>
+  <script src="./renderer.js"></script>
+</body>
+</html>
