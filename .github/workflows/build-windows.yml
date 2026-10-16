@@ -30,6 +30,7 @@ jobs:
 
       - name: Validate JavaScript
         run: |
+          npm test
           node --check src/main.js
           node --check src/preload.js
           node --check src/renderer.js

@@ -8,6 +8,11 @@ const SIDEBAR = 220;
 const HEADER = 52;
 const QUICK_PANEL = 350;
 const CHROME_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
+const COMMUNITY_APP_ID = 'net.afatec.hubzap.community';
+const COMMUNITY_USER_DATA_DIRECTORY = 'HubZap Community';
+const UPDATE_REPOSITORY = Object.freeze({ owner: 'allissonfreitas', repo: 'hubzap' });
+const UPDATE_API_URL = `https://api.github.com/repos/${UPDATE_REPOSITORY.owner}/${UPDATE_REPOSITORY.repo}/releases/latest`;
+const UPDATE_RELEASE_URL = `https://github.com/${UPDATE_REPOSITORY.owner}/${UPDATE_REPOSITORY.repo}/releases/latest`;
 
 let win;
 let selected = 'personal';
@@ -31,14 +36,18 @@ function sendUnreadState() {
 }
 
 
-// Required on Windows so native notifications are associated with HubZap.
-if (process.platform === 'win32') app.setAppUserModelId('net.afatec.hubzap');
+// Keep the public/community edition isolated from private HubZap editions.
+// Persistent WhatsApp partitions, local settings and cache all live below userData.
+app.setPath('userData', path.join(app.getPath('appData'), COMMUNITY_USER_DATA_DIRECTORY));
+
+// Required on Windows so native notifications are associated with this edition.
+if (process.platform === 'win32') app.setAppUserModelId(COMMUNITY_APP_ID);
 
 autoUpdater.autoDownload = false;
 // Full NSIS downloads avoid differential blockmap/cache failures on Windows.
 autoUpdater.disableDifferentialDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
-autoUpdater.setFeedURL({ provider: 'github', owner: 'allissonfreitas', repo: 'hubzap' });
+autoUpdater.setFeedURL({ provider: 'github', ...UPDATE_REPOSITORY });
 
 function sendUpdateStatus(status) {
   if (win && !win.isDestroyed()) win.webContents.send('update:status', status);
@@ -454,7 +463,7 @@ ipcMain.handle('update:check', async () => {
   try {
     sendUpdateStatus({ state: 'checking' });
     const release = await new Promise((resolve, reject) => {
-      const req = https.get('https://api.github.com/repos/allissonfreitas/hubzap-releases/releases/latest', {
+      const req = https.get(UPDATE_API_URL, {
         headers: { 'User-Agent': 'HubZap/' + app.getVersion(), 'Accept': 'application/vnd.github+json' },
         timeout: 10000
       }, res => {
@@ -487,8 +496,7 @@ ipcMain.handle('update:check', async () => {
   }
 });
 ipcMain.handle('update:open-release', async () => {
-  const url = 'https://github.com/allissonfreitas/hubzap-releases/releases/latest';
-  await shell.openExternal(url);
+  await shell.openExternal(UPDATE_RELEASE_URL);
   return { ok: true };
 });
 ipcMain.handle('update:download', async () => {
@@ -499,7 +507,7 @@ ipcMain.handle('update:download', async () => {
   if (process.platform === 'win32') {
     try {
       sendUpdateStatus({ state: 'downloading', percent: 0 });
-      const latest = await net.fetch('https://api.github.com/repos/allissonfreitas/hubzap-releases/releases/latest', {
+      const latest = await net.fetch(UPDATE_API_URL, {
         headers: { 'User-Agent': 'HubZap/' + app.getVersion(), 'Accept': 'application/vnd.github+json' }
       });
       if (!latest.ok) throw new Error('Não foi possível consultar a versão publicada (' + latest.status + ').');
@@ -567,7 +575,7 @@ app.whenReady().then(() => {
   reminderTimer = setInterval(checkDueEvents, 15000);
   if (app.isPackaged) setTimeout(async () => {
     try {
-      const response = await net.fetch('https://api.github.com/repos/allissonfreitas/hubzap-releases/releases/latest', {
+      const response = await net.fetch(UPDATE_API_URL, {
         headers: { 'User-Agent': 'HubZap/' + app.getVersion(), 'Accept': 'application/vnd.github+json' }
       });
       if (!response.ok) return;

@@ -1,6 +1,6 @@
 {
   "name": "hubzap",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "HubZap by AFATEC - múltiplas sessões do WhatsApp em uma única aplicação",
   "main": "src/main.js",
   "author": {
@@ -11,6 +11,7 @@
   "private": false,
   "scripts": {
     "start": "electron .",
+    "test": "node --test",
     "dist:win": "electron-builder --win nsis",
     "pack:win": "electron-builder --win --dir",
     "dist:linux": "electron-builder --linux AppImage deb rpm"
@@ -20,7 +21,7 @@
     "electron-builder": "^26.0.12"
   },
   "build": {
-    "appId": "net.afatec.hubzap",
+    "appId": "net.afatec.hubzap.community",
     "productName": "HubZap",
     "directories": {
       "output": "dist"
@@ -48,7 +49,7 @@
         "repo": "hubzap"
       }
     ],
-    "artifactName": "${productName}-Setup-${version}.${ext}",
+    "artifactName": "HubZap-Setup-${version}.${ext}",
     "linux": {
       "target": [
         {

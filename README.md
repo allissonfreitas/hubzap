@@ -21,6 +21,10 @@ npm install
 npm start
 ```
 
+## Dados da edição pública
+
+A partir da versão 0.1.1, a edição pública usa identidade e diretório de dados próprios (`HubZap Community`). Ela não importa automaticamente sessões do WhatsApp, configurações, mensagens rápidas, lembretes ou atendimentos de outras edições do HubZap. Essa separação evita compartilhar dados com edições privadas.
+
 ## Licença
 
 MIT. HubZap é um projeto da AFATEC.

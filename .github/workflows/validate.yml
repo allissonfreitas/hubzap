@@ -14,6 +14,7 @@ jobs:
         with:
           node-version: 22
       - run: npm install
+      - run: npm test
       - run: node --check src/main.js
       - run: node --check src/preload.js
       - run: node --check src/renderer.js

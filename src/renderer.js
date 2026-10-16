@@ -269,7 +269,16 @@ async function savePrivacy(){
   if(result.ok){privacy=result.settings;renderPrivacy();}
 }
 document.querySelector('#privacyToggle').addEventListener('click',async()=>{privacy.enabled=!privacy.enabled;await savePrivacy();toast(privacy.enabled?'🔒 Privacidade ativada.':'🔓 Privacidade desativada.');});
-[['privacyNames','names'],['privacyPhotos','photos'],['privacyPreviews','previews'],['privacyChat','chat'],['privacyMedia','media'],['privacyHover','revealOnHover']].forEach(([id,key])=>document.querySelector('#'+id).addEventListener('change',async e=>{privacy[key]=e.target.checked;await savePrivacy();}));
+[
+  ['privacyPersonal','personal'],
+  ['privacyCompany','company'],
+  ['privacyNames','names'],
+  ['privacyPhotos','photos'],
+  ['privacyPreviews','previews'],
+  ['privacyChat','chat'],
+  ['privacyMedia','media'],
+  ['privacyHover','revealOnHover']
+].forEach(([id,key])=>document.querySelector('#'+id).addEventListener('change',async e=>{privacy[key]=e.target.checked;await savePrivacy();}));
 window.hubZap.getPrivacy().then(settings=>{privacy=settings;renderPrivacy();});
 
 accounts.forEach(b => b.addEventListener('click', () => choose(b.dataset.account)));
