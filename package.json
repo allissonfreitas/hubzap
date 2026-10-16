@@ -1,0 +1,82 @@
+{
+  "name": "hubzap",
+  "version": "0.1.0",
+  "description": "HubZap by AFATEC - múltiplas sessões do WhatsApp em uma única aplicação",
+  "main": "src/main.js",
+  "author": {
+    "name": "Afatec",
+    "email": "contato@afatec.net"
+  },
+  "license": "MIT",
+  "private": false,
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win nsis",
+    "pack:win": "electron-builder --win --dir",
+    "dist:linux": "electron-builder --linux AppImage deb rpm"
+  },
+  "devDependencies": {
+    "electron": "^39.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "net.afatec.hubzap",
+    "productName": "HubZap",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "HubZap"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "allissonfreitas",
+        "repo": "hubzap"
+      }
+    ],
+    "artifactName": "${productName}-Setup-${version}.${ext}",
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "rpm",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Network",
+      "synopsis": "HubZap - múltiplas sessões do WhatsApp em uma única aplicação",
+      "artifactName": "${productName}-${version}-linux-${arch}.${ext}",
+      "maintainer": "Afatec <contato@afatec.net>"
+    }
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
+  }
+}
