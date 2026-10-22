@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, clipboard, Notification, net, safeStorage, dialog } = require('electron');
+const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, clipboard, Notification, net, safeStorage, dialog, Menu } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
@@ -16,6 +16,8 @@ ipcMain.on = (channel, listener) => registerOn(channel, (event, ...args) => {
 const WHATSAPP_URL = 'https://web.whatsapp.com/';
 const { normalizePreferences } = require('./preferences');
 const { OutlookCalendar } = require('./outlook');
+const { StickerStore, MAX_FILE } = require('./stickers');
+const { allowedStickerSource, imageReadScript } = require('./sticker-capture');
 let preferences = normalizePreferences();
 let extraPanelOpen = false;
 let outlook;
@@ -160,6 +162,14 @@ function createWhatsAppView(id) {
     } catch { event.preventDefault(); }
   });
 
+  view.webContents.on('context-menu', (_event, params) => {
+    if (params.mediaType !== 'image' || !params.srcURL) return;
+    Menu.buildFromTemplate([
+      { label: 'Salvar na biblioteca de stickers • ' + account.label, click: () => captureSticker(view, id, params.srcURL) },
+      { label: 'Salvar imagem como…', click: () => view.webContents.downloadURL(params.srcURL) },
+      { label: 'Copiar imagem', click: () => view.webContents.copyImageAt(params.x, params.y) }
+    ]).popup({ window: win });
+  });
   view.webContents.setUserAgent(CHROME_USER_AGENT);
   // Synchronize the sidebar with WhatsApp's real unread conversation rows.
   // This deliberately ignores the left navigation badge/title because those can
@@ -647,30 +657,39 @@ function checkCalendarNotices() {
     if (Notification.isSupported()) { const notice = new Notification({ title:'HubZap • Reunião em breve', body:item.title+' • '+new Date(item.start).toLocaleTimeString('pt-BR') }); notice.on('click',()=>{win?.show();win?.focus();}); notice.show(); }
   }
 }
-const stickerDirectory = () => path.join(app.getPath('userData'), 'stickers');
-function readStickers() { try { return JSON.parse(fs.readFileSync(path.join(stickerDirectory(), 'index.json'),'utf8')); } catch { return []; } }
-function saveStickers(items) { fs.mkdirSync(stickerDirectory(),{recursive:true});fs.writeFileSync(path.join(stickerDirectory(),'index.json'),JSON.stringify(items)); }
-handle('stickers:list', () => readStickers().map(item => ({...item, preview:'data:'+item.mime+';base64,'+fs.readFileSync(path.join(stickerDirectory(),item.id+item.ext)).toString('base64')})));
-handle('stickers:import', async () => {
-  const result = await dialog.showOpenDialog(win,{properties:['openFile','multiSelections'],filters:[{name:'Imagens',extensions:['png','webp','gif']}]});
-  if (result.canceled) return {ok:true};
-  const items=readStickers();
-  for (const file of result.filePaths.slice(0,20)) {
-    if (fs.statSync(file).size > 5*1024*1024) return {ok:false,error:'O limite por imagem é 5 MB.'};
-    const total=items.reduce((sum,item)=>sum+fs.statSync(path.join(stickerDirectory(),item.id+item.ext)).size,0);
-    if (total+fs.statSync(file).size>50*1024*1024) return {ok:false,error:'A biblioteca atingiu 50 MB. Exclua imagens para importar novas.'};
-    const data=fs.readFileSync(file); const ext=path.extname(file).toLowerCase();
-    const valid = ext==='.png' ? data.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])) : ext==='.gif' ? /^GIF8[79]a$/.test(data.subarray(0,6).toString()) : ext==='.webp' && data.subarray(0,4).toString()==='RIFF' && data.subarray(8,12).toString()==='WEBP';
-    if (!valid || data.length>5*1024*1024 || items.length>=200) return {ok:false,error:'Use PNG, GIF ou WebP válido até 5 MB (máximo 200 itens).'};
-    const id=require('node:crypto').randomUUID(); fs.mkdirSync(stickerDirectory(),{recursive:true});fs.writeFileSync(path.join(stickerDirectory(),id+ext),data);
-    items.push({id,ext,mime:ext==='.png'?'image/png':ext==='.gif'?'image/gif':'image/webp',title:path.basename(file,ext).slice(0,100),category:ext==='.gif'||data.includes(Buffer.from('ANIM'))?'Animados':'Reações',favorite:false,recent:0}); saveStickers(items);
-  } return {ok:true};
+
+const stickerStore = () => new StickerStore(path.join(app.getPath('userData'), 'stickers'));
+function stickerOperation(operation) { try { return operation(); } catch(error) { return {ok:false,error:error.message}; } }
+handle('stickers:list', () => stickerStore().list());
+handle('stickers:import', async (input = {}) => {
+  const result = await dialog.showOpenDialog(win,{properties:['openFile','multiSelections'],filters:[{name:'Figurinhas',extensions:['png','webp','gif']}]});
+  if(result.canceled)return {ok:true,canceled:true};
+  return stickerOperation(() => {let added=0,duplicates=0;const errors=[];for(const file of result.filePaths.slice(0,20)){try{const r=stickerStore().addFile(file,input);if(r.duplicate)duplicates++;else added++;}catch(error){errors.push(error.message);}}notifyStickers();return {ok:!errors.length,added,duplicates,error:errors.join(' ')};});
 });
+handle('stickers:save', (payload) => stickerOperation(() => {
+  const match=typeof payload?.data==='string' && payload.data.length<=MAX_FILE*1.4+100 && payload.data.match(/^data:image\/(?:png|webp|gif);base64,([A-Za-z0-9+/=]+)$/);
+  if(!match)throw new Error('Imagem inválida ou maior que 5 MB.');
+  const result=stickerStore().add(Buffer.from(match[1],'base64'),payload);notifyStickers();return result;
+}));
+handle('stickers:update', (id,input) => stickerOperation(() => {const result=stickerStore().update(id,input);notifyStickers();return result;}));
 handle('stickers:action', async (id, action) => {
-  const items=readStickers();const item=items.find(x=>x.id===id);if(!item)return;
-  if(action==='favorite')item.favorite=!item.favorite;
-  if(action==='open'){item.recent=Date.now();await shell.showItemInFolder(path.join(stickerDirectory(),item.id+item.ext));}
-  if(action==='category')item.category=item.category==='Memes'?'Reações':'Memes';
-  if(action==='delete'){fs.rmSync(path.join(stickerDirectory(),item.id+item.ext),{force:true});items.splice(items.indexOf(item),1);}
-  saveStickers(items);
+  try {
+    const store=stickerStore();const item=store.read().find(x=>x.id===id);if(!item)throw new Error('Figurinha não encontrada.');
+    if(action==='export'){
+      const result=await dialog.showSaveDialog(win,{defaultPath:item.title.replace(/[<>:"/\\|?*]/g,'_')+item.ext,filters:[{name:'Imagem original',extensions:[item.ext.slice(1)]}]});
+      if(result.canceled)return {ok:true,canceled:true};fs.copyFileSync(store.file(item),result.filePath);
+    }
+    store.action(id,action);
+    if(action==='open')shell.showItemInFolder(store.file(item));notifyStickers();return {ok:true};
+  }catch(error){return {ok:false,error:error.message};}
 });
+function notifyStickers(message) { if(win&&!win.isDestroyed())win.webContents.send('stickers:changed', {message}); }
+async function captureSticker(view, collection, url) {
+  try {
+    if(!allowedStickerSource(url))throw new Error('Use uma imagem recebida no WhatsApp ou importe o arquivo salvo.');
+    // Read only the image selected by the user; no internal WhatsApp APIs.
+    const data=await view.webContents.executeJavaScript(imageReadScript(url),true);
+    const result=stickerStore().add(Buffer.from(data,'base64'),{title:'Figurinha do WhatsApp',collection,source:'WhatsApp',category:'Reações'});
+    notifyStickers(result.duplicate?'Essa figurinha já está nesta coleção.':'Figurinha salva na coleção '+(collection==='company'?'Empresa':'Pessoal')+'.');
+  }catch(error){notifyStickers('Não foi possível salvar diretamente. Use Salvar imagem como… e depois Importar. '+error.message);}
+}

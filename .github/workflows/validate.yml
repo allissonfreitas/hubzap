@@ -21,3 +21,6 @@ jobs:
       - run: node --check src/modern-shell.js
       - run: node --check src/modern.js
       - run: node --check src/outlook.js
+      - run: node --check src/stickers.js
+      - run: node --check src/sticker-capture.js
+      - run: node --check src/stickers-ui.js

@@ -51,3 +51,11 @@ npm run dist:win -- --publish never
 ```
 
 O smoke test abre o Electron com dados isolados em `.smoke-data/`, verifica a navegação e as preferências e salva uma captura em `dist/hubzap-preview.png`. Não autentica WhatsApp nem Microsoft. A sincronização real do Outlook deve ser validada com uma conta autorizada após configurar o registro Microsoft. Os workflows geram artefatos de build; não publicam releases automaticamente.
+
+## Repertório e criador de figurinhas
+
+Salve imagens dos grupos pelo menu de contexto quando disponíveis, importe arquivos, arraste ou cole imagens e organize em Pessoal, Empresa e Compartilhados. Há nome, grupo de origem, etiquetas, favoritos, detecção de duplicatas e exportação do original. O criador local gera WebP estático com imagem e texto. [Como usar](docs/STICKERS.md).
+
+## Windows e Linux em todas as versões
+
+O suporte aos dois sistemas é obrigatório. O workflow Linux executa testes e a interface no Ubuntu e gera AppImage, DEB e RPM x64 com `npm run dist:linux -- --publish never`. Os pacotes ficam nos artefatos **HubZap-Linux-x64** em GitHub Actions; o instalador Windows fica em **HubZap-Windows-Setup**. Não são publicadas releases automaticamente. Para executar AppImage, torne o arquivo executável; algumas distribuições exigem FUSE, ou use `--appimage-extract-and-run`.

@@ -131,65 +131,6 @@ window.hubZap.onState((state) => {
   $("#single").classList.toggle("active", state.layout === "single");
   $("#split").classList.toggle("active", state.layout === "split");
 });
-async function loadStickers() {
-  try {
-    stickers = await window.hubZap.stickersList();
-    renderStickers();
-  } catch {
-    toast("Não foi possível carregar a biblioteca.");
-  }
-}
-function renderStickers() {
-  const list = $("#stickerList");
-  list.replaceChildren();
-  const search = $("#stickerSearch").value.toLocaleLowerCase();
-  const category = $("#stickerCategory").value;
-  const filtered = stickers
-    .filter(
-      (x) =>
-        x.title.toLocaleLowerCase().includes(search) &&
-        (category === "Todos" ||
-          (category === "Favoritos" && x.favorite) ||
-          (category === "Recentes" && x.recent) ||
-          category === x.category),
-    )
-    .sort((a, b) => (category === "Recentes" ? b.recent - a.recent : 0));
-  if (!filtered.length)
-    list.textContent = "Nenhum sticker nesta categoria. Importe suas imagens.";
-  for (const item of filtered) {
-    const card = document.createElement("article");
-    card.className = "quick-card";
-    const image = document.createElement("img");
-    image.src = item.preview;
-    image.alt = item.title;
-    image.className = "sticker-preview";
-    const title = document.createElement("p");
-    title.textContent = item.title;
-    card.append(image, title);
-    for (const [action, label] of [
-      ["open", "Mostrar arquivo"],
-      ["favorite", item.favorite ? "★" : "☆"],
-      ["category", "Memes / Reações"],
-      ["delete", "Excluir"],
-    ]) {
-      const b = document.createElement("button");
-      b.textContent = label;
-      b.onclick = async () => {
-        await window.hubZap.stickersAction(item.id, action);
-        await loadStickers();
-      };
-      card.append(b);
-    }
-    list.append(card);
-  }
-}
-$("#stickerSearch").oninput = renderStickers;
-$("#stickerCategory").onchange = renderStickers;
-$("#stickerImport").onclick = async () => {
-  const r = await window.hubZap.stickersImport();
-  if (!r.ok) toast(r.error);
-  await loadStickers();
-};
 async function outlookStatus() {
   const s = await window.hubZap.outlookStatus();
   $("#outlookStatus").textContent = !s.configured
@@ -210,7 +151,9 @@ function renderMeetings() {
   const today = new Date().toLocaleDateString();
   const future = meetings.filter((x) => new Date(x.end) > new Date());
   const count = future.filter(
-    (x) => new Date(x.start) - Date.now() >= 0 && new Date(x.start) - Date.now() <= 900000,
+    (x) =>
+      new Date(x.start) - Date.now() >= 0 &&
+      new Date(x.start) - Date.now() <= 900000,
   ).length;
   $("#agendaBadge").textContent = count;
   $("#agendaBadge").classList.toggle("hidden", !count);

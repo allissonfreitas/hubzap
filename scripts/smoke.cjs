@@ -1,10 +1,16 @@
 const { app, BrowserWindow, dialog } = require("electron");
 const path = require("path");
 const fs = require("fs");
-app.setPath("appData", path.join(__dirname, "..", ".smoke-data"));
-fs.mkdirSync(app.getPath("appData"), { recursive: true });
-const fixture = path.join(app.getPath('appData'), 'smoke-sticker.png');
-fs.writeFileSync(fixture, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXioAAAAASUVORK5CYII=', 'base64'));
+const smokeDirectory=path.join(__dirname,'..','.smoke-data','run-'+require('node:crypto').randomUUID());
+fs.mkdirSync(smokeDirectory,{recursive:true});app.setPath('appData',smokeDirectory);
+const fixture = path.join(app.getPath("appData"), "smoke-sticker.png");
+fs.writeFileSync(
+  fixture,
+  Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXioAAAAASUVORK5CYII=",
+    "base64",
+  ),
+);
 dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [fixture] });
 const failures = [];
 app.on("web-contents-created", (_event, wc) => {
@@ -42,6 +48,22 @@ app.whenReady().then(async () => {
       const imported=await window.hubZap.stickersList();check(imported.length===1 && imported[0].preview.startsWith('data:image/png;base64,'),'sticker preview');
       await window.hubZap.stickersAction(imported[0].id,'favorite');check((await window.hubZap.stickersList())[0].favorite,'favorite sticker');
       await window.hubZap.stickersAction(imported[0].id,'delete');check((await window.hubZap.stickersList()).length===0,'delete sticker');
+      document.getElementById('stickerCollection').value='company';
+      document.getElementById('stickerCreate').click();
+      const source=document.createElement('canvas');source.width=64;source.height=64;source.getContext('2d').fillRect(0,0,64,64);const sourceBlob=await new Promise(resolve=>source.toBlob(resolve));
+      const transfer=new DataTransfer();transfer.items.add(new File([sourceBlob],'foto.png',{type:'image/png'}));
+      document.getElementById('creatorFile').files=transfer.files;
+      await document.getElementById('creatorFile').onchange({target:document.getElementById('creatorFile')});
+      check(!document.getElementById('creatorSave').disabled,'creator loaded image');
+      document.getElementById('creatorBottom').value='Bom dia!';document.getElementById('creatorBottom').dispatchEvent(new Event('input'));
+      await document.getElementById('creatorSave').onclick();
+      const created=await window.hubZap.stickersList();check(created.length===1&&created[0].collection==='company'&&created[0].mime==='image/webp','created WebP in company library');
+      const encoded=created[0].preview.split(',')[1];const bytes=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));const bitmap=await createImageBitmap(new Blob([bytes],{type:'image/webp'}));check(bitmap.width===512&&bitmap.height===512,'512px output');bitmap.close();
+      await window.hubZap.stickersUpdate(created[0].id,{title:'Minha reação',source:'Grupo de teste',tags:'bom dia'});
+      check((await window.hubZap.stickersList())[0].source==='Grupo de teste','group metadata');
+      const duplicate=await window.hubZap.stickersSave({data:created[0].preview,collection:'company'});check(duplicate.duplicate,'deduplication');
+      await window.hubZap.stickersAction(created[0].id,'delete');
+      document.getElementById('stickerCollection').value='all';
       document.getElementById('supportToggle').click();check(!document.getElementById('supportPanel').classList.contains('hidden'),'agenda open');
       document.getElementById('quickToggle').click();check(document.getElementById('supportPanel').classList.contains('hidden'),'close agenda');
       document.getElementById('ticketsToggle').click();check(document.getElementById('quickPanel').classList.contains('hidden'),'close quick messages');
