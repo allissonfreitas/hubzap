@@ -1,8 +1,14 @@
-const { app, BrowserWindow, dialog } = require("electron");
+const { app, BrowserWindow, dialog, session } = require("electron");
 const path = require("path");
 const fs = require("fs");
-const smokeDirectory=path.join(__dirname,'..','.smoke-data','run-'+require('node:crypto').randomUUID());
-fs.mkdirSync(smokeDirectory,{recursive:true});app.setPath('appData',smokeDirectory);
+const smokeDirectory = path.join(
+  __dirname,
+  "..",
+  ".smoke-data",
+  "run-" + require("node:crypto").randomUUID(),
+);
+fs.mkdirSync(smokeDirectory, { recursive: true });
+app.setPath("appData", smokeDirectory);
 const fixture = path.join(app.getPath("appData"), "smoke-sticker.png");
 fs.writeFileSync(
   fixture,
@@ -23,6 +29,25 @@ app.on("web-contents-created", (_event, wc) => {
     failures.push(JSON.stringify(detail)),
   );
 });
+// Keep smoke tests independent from WhatsApp connectivity and real accounts.
+app.whenReady().then(() => {
+  for (const partition of ["persist:wa-personal", "persist:wa-company"]) {
+    session
+      .fromPartition(partition)
+      .protocol.handle(
+        "https",
+        () =>
+          new Response(
+            "<html><title>WhatsApp fixture</title><body>Offline test view</body></html>",
+            { headers: { "content-type": "text/html" } },
+          ),
+      );
+  }
+});
+setTimeout(() => {
+  console.error("Smoke test timed out.");
+  app.exit(1);
+}, 120000).unref();
 require("../src/main");
 app.whenReady().then(async () => {
   try {
@@ -34,6 +59,11 @@ app.whenReady().then(async () => {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     const result = await win.webContents.executeJavaScript(`(async()=>{
       const check=(condition,label)=>{if(!condition)throw new Error(label)};
+      check(document.getElementById('toolbarUpdateButton'),'permanent update toolbar button');
+      await window.hubZap.checkUpdate();
+      await new Promise(resolve=>setTimeout(resolve,50));
+      check(document.getElementById('updateButton').dataset.state==='development','development status does not get stuck checking');
+      check(!document.getElementById('toolbarUpdateButton').disabled,'update retry enabled');
       check(document.body.classList.contains('compact'),'compact sidebar');
       check(document.getElementById('sidebar').getBoundingClientRect().width===72,'sidebar width');
       document.getElementById('settingsToggle').click();

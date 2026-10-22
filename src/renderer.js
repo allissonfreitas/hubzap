@@ -207,50 +207,6 @@ async function loadQuickMessages() {
   renderQuickMessages();
 }
 
-function setUpdateStatus(status) {
-  const button = document.querySelector('#updateButton');
-  const detail = document.querySelector('#updateDetail');
-  updateState = status.state || 'current';
-  if (updateState === 'error') updateError = status.message || 'Falha ao baixar ou instalar a atualização.';
-  else updateError = '';
-  button.dataset.state = updateState;
-  button.disabled = updateState === 'checking' || updateState === 'downloading';
-  button.title = updateError;
-
-  if (updateState === 'checking') { button.querySelector('b').textContent = '↻ Verificando atualização'; detail.textContent = 'Aguarde...'; }
-  else if (updateState === 'available') { button.querySelector('b').textContent = '⬆ Nova versão ' + status.version; detail.textContent = 'Clique para baixar e atualizar'; }
-  else if (updateState === 'downloading') { button.querySelector('b').textContent = '↓ Baixando atualização'; detail.textContent = (status.percent || 0) + '% concluído'; }
-  else if (updateState === 'ready') { button.querySelector('b').textContent = '✓ Atualização pronta'; detail.textContent = 'Clique para instalar e reiniciar'; }
-  else if (updateState === 'error') { button.querySelector('b').textContent = '⚠ Não foi possível atualizar'; detail.textContent = updateError.slice(0, 130) + ' — clique para ver opções'; }
-  else { button.querySelector('b').textContent = '✓ HubZap atualizado'; detail.textContent = 'Clique para verificar agora'; }
-}
-
-document.querySelector('#updateButton').addEventListener('click', async () => {
-  if (updateState === 'available') {
-    setUpdateStatus({ state: 'downloading', percent: 0 });
-    const result = await window.hubZap.downloadUpdate();
-    if (!result.ok && !result.dev) setUpdateStatus({ state: 'error', message: result.error });
-  } else if (updateState === 'error') {
-    const manual = confirm('Falha na atualização: ' + updateError + '\n\nOK: abrir a página oficial para instalar manualmente.\nCancelar: tentar verificar novamente.');
-    if (manual) return window.hubZap.openRelease();
-    setUpdateStatus({ state: 'checking' });
-    const result = await window.hubZap.checkUpdate();
-    if (!result.ok && !result.dev) setUpdateStatus({ state: 'error', message: result.error });
-  } else if (updateState === 'ready') {
-    window.hubZap.installUpdate();
-  } else {
-    setUpdateStatus({ state: 'checking' });
-    const result = await window.hubZap.checkUpdate();
-    if (result.dev) { setUpdateStatus({ state: 'current' }); toast('A verificação automática funciona no HubZap instalado.'); }
-    else if (!result.ok) setUpdateStatus({ state: 'error', message: result.error });
-  }
-});
-window.hubZap.onUpdateStatus(setUpdateStatus);
-window.hubZap.getVersion().then(version => {
-  document.querySelector('#appVersion').textContent = 'v' + version;
-});
-setUpdateStatus({ state: 'current' });
-
 function renderPrivacy(){
   const control=document.querySelector('#privacyControl');
   const toggle=document.querySelector('#privacyToggle');

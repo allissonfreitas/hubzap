@@ -15,12 +15,13 @@ test('public edition uses its own identity and data directory', () => {
   assert.match(main, /app\.setAppUserModelId\(COMMUNITY_APP_ID\)/);
 });
 
-test('all update paths target the public repository', () => {
-  const source = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
-  assert.equal(source.includes('hubzap' + '-releases'), false);
-  assert.match(source, /UPDATE_REPOSITORY = Object\.freeze\(\{ owner: 'allissonfreitas', repo: 'hubzap' \}\)/);
-  assert.match(source, /https:\/\/api\.github\.com\/repos\/\$\{UPDATE_REPOSITORY\.owner\}\/\$\{UPDATE_REPOSITORY\.repo\}\/releases\/latest/);
-  assert.match(source, /https:\/\/github\.com\/\$\{UPDATE_REPOSITORY\.owner\}\/\$\{UPDATE_REPOSITORY\.repo\}\/releases\/latest/);
+test('all update paths target the permanent public repository', () => {
+  const config = require('../src/update-config');
+  assert.deepEqual(config.UPDATE_REPOSITORY, {owner:'allissonfreitas',repo:'hubzap'});
+  assert.ok(Object.isFrozen(config.UPDATE_REPOSITORY));
+  assert.deepEqual(packageJson.build.publish[0],config.UPDATE_FEED);
+  assert.equal(config.UPDATE_RELEASE_URL,'https://github.com/allissonfreitas/hubzap/releases/latest');
+  assert.match(main,/new UpdateController/);
 });
 
 test('privacy account selectors persist and reapply their own setting', () => {
@@ -42,8 +43,8 @@ test('privacy panel collapse is independent from the enabled switch', () => {
   assert.match(styles, /\.privacy-control\{[^}]*flex:0 0 auto;min-height:45px/);
 });
 
-test('release metadata remains stable for v0.1.1', () => {
-  assert.equal(packageJson.version, '0.1.1');
+test('release metadata retains identity and advances to v0.1.2', () => {
+  assert.equal(packageJson.version, '0.1.2');
   assert.equal(packageJson.build.productName, 'HubZap');
   assert.equal(packageJson.build.artifactName, 'HubZap-Setup-${version}.${ext}');
   assert.deepEqual(packageJson.build.publish[0], {

@@ -2,6 +2,8 @@ const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, clipboard,
 const fs = require('fs');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
+const { UpdateController } = require('./updates');
+const { UPDATE_RELEASE_URL } = require('./update-config');
 
 // Restrict every privileged message to the local main frame.
 const registerHandle = ipcMain.handle.bind(ipcMain);
@@ -27,10 +29,6 @@ const QUICK_PANEL = 350;
 const CHROME_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 const COMMUNITY_APP_ID = 'net.afatec.hubzap.community';
 const COMMUNITY_USER_DATA_DIRECTORY = 'HubZap Community';
-const UPDATE_REPOSITORY = Object.freeze({ owner: 'allissonfreitas', repo: 'hubzap' });
-const UPDATE_API_URL = `https://api.github.com/repos/${UPDATE_REPOSITORY.owner}/${UPDATE_REPOSITORY.repo}/releases/latest`;
-const UPDATE_RELEASE_URL = `https://github.com/${UPDATE_REPOSITORY.owner}/${UPDATE_REPOSITORY.repo}/releases/latest`;
-
 let win;
 let selected = 'personal';
 let layout = 'single';
@@ -38,7 +36,7 @@ let quickPanelOpen = false;
 let supportPanelOpen = false;
 let ticketsPanelOpen = false;
 let reminderTimer;
-let updateAvailableVersion = null;
+let updates;
 let privacySettings = { enabled:false, personal:true, company:true, names:true, photos:true, previews:true, chat:true, media:true, revealOnHover:true };
 const views = new Map();
 const unreadByAccount = { personal: 0, company: 0 };
@@ -61,26 +59,10 @@ app.setPath('sessionData', app.getPath('userData'));
 // Required on Windows so native notifications are associated with this edition.
 if (process.platform === 'win32') app.setAppUserModelId(COMMUNITY_APP_ID);
 
-autoUpdater.autoDownload = false;
-// Full NSIS downloads avoid differential blockmap/cache failures on Windows.
-autoUpdater.disableDifferentialDownload = true;
-autoUpdater.autoInstallOnAppQuit = true;
-autoUpdater.setFeedURL({ provider: 'github', ...UPDATE_REPOSITORY });
-
 function sendUpdateStatus(status) {
   if (win && !win.isDestroyed()) win.webContents.send('update:status', status);
 }
-
-autoUpdater.on('checking-for-update', () => sendUpdateStatus({ state: 'checking' }));
-autoUpdater.on('update-available', info => { updateAvailableVersion = info.version; sendUpdateStatus({ state: 'available', version: info.version }); });
-autoUpdater.on('update-not-available', info => { updateAvailableVersion = null; sendUpdateStatus({ state: 'current', version: info?.version || app.getVersion() }); });
-autoUpdater.on('download-progress', progress => sendUpdateStatus({ state: 'downloading', percent: Math.round(progress.percent || 0) }));
-autoUpdater.on('update-downloaded', info => sendUpdateStatus({ state: 'ready', version: info.version }));
-autoUpdater.on('error', error => {
-  const message = String(error?.stack || error?.message || error);
-  console.error('[HubZap updater]', message);
-  sendUpdateStatus({ state: 'error', message: String(error?.message || error).slice(0, 300) });
-});
+updates = new UpdateController({updater:autoUpdater,packaged:app.isPackaged,version:app.getVersion(),send:sendUpdateStatus});
 
 const accounts = {
   personal: { label: 'Pessoal', partition: 'persist:wa-personal' },
@@ -174,8 +156,10 @@ function createWhatsAppView(id) {
   // Synchronize the sidebar with WhatsApp's real unread conversation rows.
   // This deliberately ignores the left navigation badge/title because those can
   // lag behind after the last unread chat is opened.
+  let unreadRefreshing = false;
   const refreshUnread = async () => {
-    if (view.webContents.isDestroyed()) return;
+    if (view.webContents.isDestroyed() || view.webContents.isLoadingMainFrame() || unreadRefreshing) return;
+    unreadRefreshing = true;
     try {
       const next = await view.webContents.executeJavaScript(`
         (() => {
@@ -206,7 +190,7 @@ function createWhatsAppView(id) {
         unreadByAccount[id] = next;
         sendUnreadState();
       }
-    } catch {}
+    } catch {} finally { unreadRefreshing = false; }
   };
 
   view.webContents.on('did-finish-load', () => {
@@ -487,117 +471,12 @@ ipcMain.handle('support:snooze', (_e, id, minutes) => {
   return { ok:true, item };
 });
 ipcMain.handle('app:version', () => app.getVersion());
-ipcMain.handle('update:check', async () => {
-  if (!app.isPackaged) return { ok: false, dev: true, version: app.getVersion() };
-  // Use Node's HTTPS stack for GitHub API checks. This avoids a net.fetch issue
-  // observed on installed Windows builds where the promise could remain pending.
-  const https = require('https');
-  try {
-    sendUpdateStatus({ state: 'checking' });
-    const release = await new Promise((resolve, reject) => {
-      const req = https.get(UPDATE_API_URL, {
-        headers: { 'User-Agent': 'HubZap/' + app.getVersion(), 'Accept': 'application/vnd.github+json' },
-        timeout: 10000
-      }, res => {
-        let body = '';
-        res.setEncoding('utf8');
-        res.on('data', chunk => { if (body.length < 1024 * 1024) body += chunk; });
-        res.on('end', () => {
-          if (res.statusCode !== 200) return reject(new Error('GitHub respondeu ' + res.statusCode + '.'));
-          try { resolve(JSON.parse(body)); } catch { reject(new Error('Resposta inválida ao verificar atualização.')); }
-        });
-      });
-      req.on('timeout', () => req.destroy(new Error('Tempo limite ao verificar atualização.')));
-      req.on('error', reject);
-    });
-    const latest = String(release.tag_name || '').replace(/^v/i, '');
-    const current = app.getVersion();
-    const newer = latest.localeCompare(current, undefined, { numeric: true, sensitivity: 'base' }) > 0;
-    if (newer) {
-      updateAvailableVersion = latest;
-      sendUpdateStatus({ state: 'available', version: latest });
-      return { ok: true, available: true, version: latest };
-    }
-    updateAvailableVersion = null;
-    sendUpdateStatus({ state: 'current', version: current });
-    return { ok: true, available: false, version: current };
-  } catch (error) {
-    const message = String(error?.message || error).slice(0, 300);
-    sendUpdateStatus({ state: 'error', message });
-    return { ok: false, error: message };
-  }
-});
-ipcMain.handle('update:open-release', async () => {
-  await shell.openExternal(UPDATE_RELEASE_URL);
-  return { ok: true };
-});
-ipcMain.handle('update:download', async () => {
-  if (!app.isPackaged) return { ok: false, dev: true };
-  // electron-updater download returned 404 for a public GitHub asset on some
-  // Windows installations. Download the full NSIS installer with Electron net
-  // and launch it directly instead of relying on the differential downloader.
-  if (process.platform === 'win32') {
-    try {
-      sendUpdateStatus({ state: 'downloading', percent: 0 });
-      const latest = await net.fetch(UPDATE_API_URL, {
-        headers: { 'User-Agent': 'HubZap/' + app.getVersion(), 'Accept': 'application/vnd.github+json' }
-      });
-      if (!latest.ok) throw new Error('Não foi possível consultar a versão publicada (' + latest.status + ').');
-      const release = await latest.json();
-      const version = String(release.tag_name || '').replace(/^v/i, '');
-      if (!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(version)) throw new Error('Versão de atualização inválida.');
-      const asset = (release.assets || []).find(a => a.name === 'HubZap-Setup-' + version + '.exe');
-      if (!asset?.browser_download_url) throw new Error('Instalador do Windows não encontrado na versão ' + version + '.');
-
-      if (asset.browser_download_url !== `https://github.com/${UPDATE_REPOSITORY.owner}/${UPDATE_REPOSITORY.repo}/releases/download/${release.tag_name}/${asset.name}`) throw new Error('Origem do instalador inválida.');
-      const response = await net.fetch(asset.browser_download_url, {
-        headers: { 'User-Agent': 'HubZap/' + app.getVersion(), 'Accept': 'application/octet-stream' }
-      });
-      if (!response.ok) throw new Error('Falha ao baixar o instalador (' + response.status + ').');
-      const total = Number(response.headers.get('content-length')) || Number(asset.size) || 0;
-      const reader = response.body.getReader();
-      const chunks = [];
-      let received = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(Buffer.from(value));
-        received += value.byteLength;
-        if (total) sendUpdateStatus({ state: 'downloading', percent: Math.min(99, Math.round(received * 100 / total)) });
-      }
-      const installer = path.join(app.getPath('temp'), asset.name);
-      fs.writeFileSync(installer, Buffer.concat(chunks));
-      updateAvailableVersion = version;
-      sendUpdateStatus({ state: 'ready', version });
-      return { ok: true, version };
-    } catch (error) {
-      const message = String(error?.message || error).slice(0, 300);
-      sendUpdateStatus({ state: 'error', message });
-      return { ok: false, error: message };
-    }
-  }
-  try {
-    await autoUpdater.downloadUpdate();
-    return { ok: true };
-  } catch (error) {
-    return { ok: false, error: String(error?.message || error).slice(0, 180) };
-  }
-});
-ipcMain.on('update:install', () => {
-  if (!app.isPackaged) return;
-  if (process.platform === 'win32') {
-    const version = updateAvailableVersion;
-    const installer = version && path.join(app.getPath('temp'), 'HubZap-Setup-' + version + '.exe');
-    if (installer && fs.existsSync(installer)) {
-      shell.openPath(installer).then(error => {
-        if (!error) setTimeout(() => app.quit(), 800);
-        else sendUpdateStatus({ state: 'error', message: error });
-      });
-      return;
-    }
-  }
-  autoUpdater.quitAndInstall(false, true);
-});
+ipcMain.handle('update:status', () => updates.status);
+ipcMain.handle('update:check', () => updates.check());
+ipcMain.handle('update:download', () => updates.download());
+ipcMain.handle('update:apply', () => updates.apply());
+ipcMain.handle('update:open-release', async () => { await shell.openExternal(UPDATE_RELEASE_URL); return {ok:true}; });
+ipcMain.on('update:install', () => updates.install());
 
 ipcMain.handle('clipboard:copy', (_e, text) => {
   clipboard.writeText(String(text || '').slice(0, 4000));
@@ -613,20 +492,10 @@ app.whenReady().then(() => {
   refreshCalendar().catch(() => {});
   createWindow();
   reminderTimer = setInterval(checkDueEvents, 15000);
-  if (app.isPackaged) setTimeout(async () => {
-    try {
-      const response = await net.fetch(UPDATE_API_URL, {
-        headers: { 'User-Agent': 'HubZap/' + app.getVersion(), 'Accept': 'application/vnd.github+json' }
-      });
-      if (!response.ok) return;
-      const release = await response.json();
-      const latest = String(release.tag_name || '').replace(/^v/i, '');
-      if (latest.localeCompare(app.getVersion(), undefined, { numeric:true, sensitivity:'base' }) > 0) {
-        updateAvailableVersion = latest;
-        sendUpdateStatus({ state:'available', version:latest });
-      } else sendUpdateStatus({ state:'current', version:app.getVersion() });
-    } catch {}
-  }, 5000);
+  if (app.isPackaged) {
+    setTimeout(() => updates.check(), 5000).unref();
+    setInterval(() => updates.check(), 6 * 60 * 60 * 1000).unref();
+  }
 });
 app.on('window-all-closed', () => { if (reminderTimer) clearInterval(reminderTimer); if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });

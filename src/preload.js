@@ -43,6 +43,8 @@ contextBridge.exposeInMainWorld('hubZap', {
   deleteQuickMessage: (id) => ipcRenderer.invoke('quick:delete', id),
   copyText: (text) => ipcRenderer.invoke('clipboard:copy', text),
   getVersion: () => ipcRenderer.invoke('app:version'),
+  getUpdateStatus: () => ipcRenderer.invoke('update:status'),
+  applyUpdate: () => ipcRenderer.invoke('update:apply'),
   checkUpdate: () => ipcRenderer.invoke('update:check'),
   downloadUpdate: () => ipcRenderer.invoke('update:download'),
   openRelease: () => ipcRenderer.invoke('update:open-release'),

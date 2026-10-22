@@ -24,3 +24,6 @@ jobs:
       - run: node --check src/stickers.js
       - run: node --check src/sticker-capture.js
       - run: node --check src/stickers-ui.js
+      - run: node --check src/updates.js
+      - run: node --check src/update-config.js
+      - run: node --check src/update-ui.js

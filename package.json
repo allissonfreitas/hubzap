@@ -1,6 +1,6 @@
 {
   "name": "hubzap",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "HubZap by AFATEC - múltiplas sessões do WhatsApp em uma única aplicação",
   "main": "src/main.js",
   "author": {
@@ -19,7 +19,8 @@
   },
   "devDependencies": {
     "electron": "^39.2.0",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "js-yaml": "^4.3.2"
   },
   "build": {
     "appId": "net.afatec.hubzap.community",
