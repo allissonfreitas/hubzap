@@ -26,7 +26,7 @@ jobs:
           node-version: "22"
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Validate JavaScript
         run: |
@@ -34,6 +34,9 @@ jobs:
           node --check src/main.js
           node --check src/preload.js
           node --check src/renderer.js
+          node --check src/modern-shell.js
+          node --check src/modern.js
+          node --check src/outlook.js
 
       - name: Build Windows installer
         run: npm run dist:win -- --publish never

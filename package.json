@@ -14,7 +14,8 @@
     "test": "node --test",
     "dist:win": "electron-builder --win nsis",
     "pack:win": "electron-builder --win --dir",
-    "dist:linux": "electron-builder --linux AppImage deb rpm"
+    "dist:linux": "electron-builder --linux AppImage deb rpm",
+    "smoke": "electron scripts/smoke.cjs"
   },
   "devDependencies": {
     "electron": "^39.2.0",
@@ -78,6 +79,9 @@
     }
   },
   "dependencies": {
+    "@azure/msal-node": "^7.1.1",
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/poppins": "^5.3.0",
     "electron-updater": "^6.6.2"
   }
 }

@@ -1,6 +1,20 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('hubZap', {
+  getAppearance: () => ipcRenderer.invoke('appearance:get'),
+  setAppearance: value => ipcRenderer.invoke('appearance:set', value),
+  setExtraPanel: value => ipcRenderer.invoke('panel:extra', value),
+  outlookStatus: () => ipcRenderer.invoke('outlook:status'),
+  outlookConnect: () => ipcRenderer.invoke('outlook:connect'),
+  outlookDisconnect: () => ipcRenderer.invoke('outlook:disconnect'),
+  outlookList: () => ipcRenderer.invoke('outlook:list'),
+  outlookOpen: id => ipcRenderer.invoke('outlook:open', id),
+  onOutlookCode: cb => ipcRenderer.on('outlook:code', (_e, data) => cb(data)),
+  onOutlookEvents: cb => ipcRenderer.on('outlook:events', (_e, data) => cb(data)),
+  onOutlookNotice: cb => ipcRenderer.on('outlook:notice', (_e, data) => cb(data)),
+  stickersList: () => ipcRenderer.invoke('stickers:list'),
+  stickersImport: () => ipcRenderer.invoke('stickers:import'),
+  stickersAction: (id, action) => ipcRenderer.invoke('stickers:action', id, action),
   selectAccount: (id) => ipcRenderer.send('account:select', id),
   setLayout: (layout) => ipcRenderer.send('layout:set', layout),
   reloadAccount: (id) => ipcRenderer.send('account:reload', id),

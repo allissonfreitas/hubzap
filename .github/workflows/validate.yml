@@ -13,8 +13,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
+      - run: npm ci
       - run: npm test
       - run: node --check src/main.js
       - run: node --check src/preload.js
       - run: node --check src/renderer.js
+      - run: node --check src/modern-shell.js
+      - run: node --check src/modern.js
+      - run: node --check src/outlook.js

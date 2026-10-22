@@ -241,7 +241,7 @@ document.querySelector('#updateButton').addEventListener('click', async () => {
   } else {
     setUpdateStatus({ state: 'checking' });
     const result = await window.hubZap.checkUpdate();
-    if (result.dev) toast('A verificação automática funciona no HubZap instalado.');
+    if (result.dev) { setUpdateStatus({ state: 'current' }); toast('A verificação automática funciona no HubZap instalado.'); }
     else if (!result.ok) setUpdateStatus({ state: 'error', message: result.error });
   }
 });

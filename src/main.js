@@ -1,10 +1,25 @@
-const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, clipboard, Notification, net } = require('electron');
+const { app, BrowserWindow, WebContentsView, session, ipcMain, shell, clipboard, Notification, net, safeStorage, dialog } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
 
+// Restrict every privileged message to the local main frame.
+const registerHandle = ipcMain.handle.bind(ipcMain);
+ipcMain.handle = (channel, listener) => registerHandle(channel, (event, ...args) => {
+  if (!trustedSender(event)) throw new Error('Origem não autorizada.');
+  return listener(event, ...args);
+});
+const registerOn = ipcMain.on.bind(ipcMain);
+ipcMain.on = (channel, listener) => registerOn(channel, (event, ...args) => {
+  if (trustedSender(event)) listener(event, ...args);
+});
 const WHATSAPP_URL = 'https://web.whatsapp.com/';
-const SIDEBAR = 220;
+const { normalizePreferences } = require('./preferences');
+const { OutlookCalendar } = require('./outlook');
+let preferences = normalizePreferences();
+let extraPanelOpen = false;
+let outlook;
+const calendarNotified = new Set();
 const HEADER = 52;
 const QUICK_PANEL = 350;
 const CHROME_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
@@ -39,6 +54,7 @@ function sendUnreadState() {
 // Keep the public/community edition isolated from private HubZap editions.
 // Persistent WhatsApp partitions, local settings and cache all live below userData.
 app.setPath('userData', path.join(app.getPath('appData'), COMMUNITY_USER_DATA_DIRECTORY));
+app.setPath('sessionData', app.getPath('userData'));
 
 // Required on Windows so native notifications are associated with this edition.
 if (process.platform === 'win32') app.setAppUserModelId(COMMUNITY_APP_ID);
@@ -87,7 +103,11 @@ function privacyCss(settings) {
   if (settings.media) rules.push(`#main img:not([src*="data:image/svg"]),#main video{filter:blur(14px)!important} #main img${hover},#main video${hover}{filter:none!important}`);
   return rules.join('\n');
 }
-async function applyPrivacyToView(view, id) {
+function applyPrivacyToView(view, id) {
+  view._privacyQueue = (view._privacyQueue || Promise.resolve()).then(() => updatePrivacyCss(view, id));
+  return view._privacyQueue;
+}
+async function updatePrivacyCss(view, id) {
   if (!view || view.webContents.isDestroyed()) return;
   try {
     if (view._hubPrivacyKey) { await view.webContents.removeInsertedCSS(view._hubPrivacyKey); view._hubPrivacyKey = null; }
@@ -198,7 +218,8 @@ function createWhatsAppView(id) {
 
 function contentBounds() {
   const [width, height] = win.getContentSize();
-  const panel = (quickPanelOpen || supportPanelOpen || ticketsPanelOpen) ? QUICK_PANEL : 0;
+  const SIDEBAR = preferences.sidebar === 'compact' ? 72 : 220;
+  const panel = (extraPanelOpen || quickPanelOpen || supportPanelOpen || ticketsPanelOpen) ? QUICK_PANEL : 0;
   return { x: SIDEBAR, y: HEADER, width: Math.max(0, width - SIDEBAR - panel), height: Math.max(0, height - HEADER) };
 }
 
@@ -362,7 +383,8 @@ ipcMain.on('tickets:panel', (_e, open) => {
 ipcMain.handle('external:afatec', async () => { await shell.openExternal('https://afatec.net'); return { ok:true }; });
 ipcMain.handle('privacy:get', () => privacySettings);
 ipcMain.handle('privacy:set', async (_e, next) => {
-  privacySettings = { ...privacySettings, ...next, enabled:Boolean(next?.enabled) };
+  for (const key of Object.keys(privacySettings)) if (typeof next?.[key] === 'boolean') privacySettings[key] = next[key];
+  fs.writeFileSync(path.join(app.getPath('userData'), 'privacy.json'), JSON.stringify(privacySettings));
   await Promise.all([...views.entries()].map(([id,v]) => applyPrivacyToView(v,id)));
   return { ok:true, settings:privacySettings };
 });
@@ -513,9 +535,11 @@ ipcMain.handle('update:download', async () => {
       if (!latest.ok) throw new Error('Não foi possível consultar a versão publicada (' + latest.status + ').');
       const release = await latest.json();
       const version = String(release.tag_name || '').replace(/^v/i, '');
+      if (!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(version)) throw new Error('Versão de atualização inválida.');
       const asset = (release.assets || []).find(a => a.name === 'HubZap-Setup-' + version + '.exe');
       if (!asset?.browser_download_url) throw new Error('Instalador do Windows não encontrado na versão ' + version + '.');
 
+      if (asset.browser_download_url !== `https://github.com/${UPDATE_REPOSITORY.owner}/${UPDATE_REPOSITORY.repo}/releases/download/${release.tag_name}/${asset.name}`) throw new Error('Origem do instalador inválida.');
       const response = await net.fetch(asset.browser_download_url, {
         headers: { 'User-Agent': 'HubZap/' + app.getVersion(), 'Accept': 'application/octet-stream' }
       });
@@ -571,6 +595,12 @@ ipcMain.handle('clipboard:copy', (_e, text) => {
 });
 
 app.whenReady().then(() => {
+  try { preferences = normalizePreferences(JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'appearance.json'), 'utf8'))); } catch {}
+  try { const saved = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'privacy.json'), 'utf8')); for (const key of Object.keys(privacySettings)) if (typeof saved[key] === 'boolean') privacySettings[key] = saved[key]; } catch {}
+  outlook = new OutlookCalendar({ directory: app.getPath('userData'), safeStorage, openExternal: url => shell.openExternal(url), onCode: code => win?.webContents.send('outlook:code', code) });
+  setInterval(() => refreshCalendar().catch(() => {}), 300000).unref();
+  setInterval(checkCalendarNotices, 15000).unref();
+  refreshCalendar().catch(() => {});
   createWindow();
   reminderTimer = setInterval(checkDueEvents, 15000);
   if (app.isPackaged) setTimeout(async () => {
@@ -590,3 +620,57 @@ app.whenReady().then(() => {
 });
 app.on('window-all-closed', () => { if (reminderTimer) clearInterval(reminderTimer); if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+
+// Only the trusted local shell may access privileged IPC, never WhatsApp views.
+function trustedSender(event) { return win && event.sender === win.webContents && event.senderFrame === win.webContents.mainFrame; }
+function handle(channel, listener) { ipcMain.handle(channel, (event, ...args) => { if (!trustedSender(event)) throw new Error('Origem não autorizada.'); return listener(...args); }); }
+handle('appearance:get', () => preferences);
+handle('appearance:set', input => {
+  preferences = normalizePreferences(input);
+  fs.writeFileSync(path.join(app.getPath('userData'), 'appearance.json'), JSON.stringify(preferences));
+  for (const view of views.values()) view.webContents.setZoomFactor(preferences.zoom / 100);
+  layoutViews(); return preferences;
+});
+handle('panel:extra', open => { extraPanelOpen = Boolean(open); layoutViews(); });
+async function refreshCalendar() { const events = await outlook.list(); if (win && !win.isDestroyed()) win.webContents.send('outlook:events', events); return events; }
+handle('outlook:status', () => outlook.status());
+handle('outlook:connect', async () => { try { await outlook.connect(); await refreshCalendar(); return { ok:true }; } catch { return { ok:false, error:'Conexão Microsoft não concluída. Confira a configuração, o consentimento e tente novamente.' }; } });
+handle('outlook:disconnect', async () => { await outlook.disconnect(); calendarNotified.clear(); win.webContents.send('outlook:events', []); return { ok:true }; });
+handle('outlook:list', async () => { try { return { ok:true, events:await refreshCalendar() }; } catch (error) { return { ok:false, error:error.message }; } });
+handle('outlook:open', async id => { const item=outlook.events.find(x=>x.id===id); if (item && /^https:\/\//i.test(item.url)) await shell.openExternal(item.url); });
+function checkCalendarNotices() {
+  for (const item of outlook?.events || []) {
+    const remaining = new Date(item.start)-Date.now(); const key=item.id+item.start;
+    if (item.allDay || remaining < 0 || remaining > 900000 || calendarNotified.has(key)) continue;
+    calendarNotified.add(key);
+    win?.webContents.send('outlook:notice', item);
+    if (Notification.isSupported()) { const notice = new Notification({ title:'HubZap • Reunião em breve', body:item.title+' • '+new Date(item.start).toLocaleTimeString('pt-BR') }); notice.on('click',()=>{win?.show();win?.focus();}); notice.show(); }
+  }
+}
+const stickerDirectory = () => path.join(app.getPath('userData'), 'stickers');
+function readStickers() { try { return JSON.parse(fs.readFileSync(path.join(stickerDirectory(), 'index.json'),'utf8')); } catch { return []; } }
+function saveStickers(items) { fs.mkdirSync(stickerDirectory(),{recursive:true});fs.writeFileSync(path.join(stickerDirectory(),'index.json'),JSON.stringify(items)); }
+handle('stickers:list', () => readStickers().map(item => ({...item, preview:'data:'+item.mime+';base64,'+fs.readFileSync(path.join(stickerDirectory(),item.id+item.ext)).toString('base64')})));
+handle('stickers:import', async () => {
+  const result = await dialog.showOpenDialog(win,{properties:['openFile','multiSelections'],filters:[{name:'Imagens',extensions:['png','webp','gif']}]});
+  if (result.canceled) return {ok:true};
+  const items=readStickers();
+  for (const file of result.filePaths.slice(0,20)) {
+    if (fs.statSync(file).size > 5*1024*1024) return {ok:false,error:'O limite por imagem é 5 MB.'};
+    const total=items.reduce((sum,item)=>sum+fs.statSync(path.join(stickerDirectory(),item.id+item.ext)).size,0);
+    if (total+fs.statSync(file).size>50*1024*1024) return {ok:false,error:'A biblioteca atingiu 50 MB. Exclua imagens para importar novas.'};
+    const data=fs.readFileSync(file); const ext=path.extname(file).toLowerCase();
+    const valid = ext==='.png' ? data.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])) : ext==='.gif' ? /^GIF8[79]a$/.test(data.subarray(0,6).toString()) : ext==='.webp' && data.subarray(0,4).toString()==='RIFF' && data.subarray(8,12).toString()==='WEBP';
+    if (!valid || data.length>5*1024*1024 || items.length>=200) return {ok:false,error:'Use PNG, GIF ou WebP válido até 5 MB (máximo 200 itens).'};
+    const id=require('node:crypto').randomUUID(); fs.mkdirSync(stickerDirectory(),{recursive:true});fs.writeFileSync(path.join(stickerDirectory(),id+ext),data);
+    items.push({id,ext,mime:ext==='.png'?'image/png':ext==='.gif'?'image/gif':'image/webp',title:path.basename(file,ext).slice(0,100),category:ext==='.gif'||data.includes(Buffer.from('ANIM'))?'Animados':'Reações',favorite:false,recent:0}); saveStickers(items);
+  } return {ok:true};
+});
+handle('stickers:action', async (id, action) => {
+  const items=readStickers();const item=items.find(x=>x.id===id);if(!item)return;
+  if(action==='favorite')item.favorite=!item.favorite;
+  if(action==='open'){item.recent=Date.now();await shell.showItemInFolder(path.join(stickerDirectory(),item.id+item.ext));}
+  if(action==='category')item.category=item.category==='Memes'?'Reações':'Memes';
+  if(action==='delete'){fs.rmSync(path.join(stickerDirectory(),item.id+item.ext),{force:true});items.splice(items.indexOf(item),1);}
+  saveStickers(items);
+});
